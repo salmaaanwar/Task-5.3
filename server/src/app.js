@@ -2,6 +2,8 @@ import express from 'express';
 import morgan from 'morgan';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { requireAuth } from './middleware/auth.js';
+import { generateCsrfToken, protectWrites } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
 import itemRoutes from './routes/items.js';
 import userRoutes from './routes/users.js';
@@ -19,6 +21,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+app.get('/api/csrf-token', requireAuth, (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ csrfToken: generateCsrfToken(req, res) });
+});
+
+app.use('/api', protectWrites);
+
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 app.use('/api/auth', authRoutes);
@@ -33,6 +42,9 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
+  if (err.code === 'EBADCSRFTOKEN') {
+    return res.status(403).json({ message: 'Invalid or missing CSRF token' });
+  }
   console.error(err);
   res.status(err.status || 500).json({ message: err.message || 'Server Error' });
 });
